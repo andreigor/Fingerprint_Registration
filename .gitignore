@@ -1,2 +1,5 @@
 src/exp_table.ipynb
 src/__pycache__/
+input_samples/basep_enhanced_images
+input_samples/basep_mnts
+input_samples/comparisons.txt

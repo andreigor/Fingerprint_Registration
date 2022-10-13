@@ -11,19 +11,125 @@ class MaxIterReached(Exception):
     "Raised when reaches max number of iterations"
     pass
 
-def ransac_similarity_transformation(latent_pts, reference_pts):
+def descriptor_based_ransac_similarity_transformation(latent_pts, reference_pts):
     """
-    Finds the parameters of a similarit transformation between the latent and reference points. If there is no correspondence between
-    the two points, it return 0 in all parameters and an error flag. Otherwise, returns the found parameters s,tx, ty and theta.
+    Finds the parameter of a similarity transformation between the latent and reference points using an initial estimation.
+    This accelarates convergence of RANSAC algorithm, since it does not have to loop through all possible points in reference
+    image to find each match.
+
+    If RANSAC finds an acceptable correspondence, returns the parameters s, theta, tx and ty. Otherwise, returns -1 in all parameters.
+
+    Input: 
+        latent_pts: latent minutia points extracted from fingernet -> list of tuples
+        reference_pts: reference minutia points extracted from fingernet that are correspondent to latent_pts -> list of tuples
+    
+    Output: parameters of the similarity transformation scale, theta, tx, ty.
+    
+    For further reference, please check sections 5.2.2 and 5.6 of the book Theory and Applications of Image Registration - Goshtasby 2017
+    """
+
+    if len(latent_pts) != len(reference_pts):
+        raise ValueError('Input lists must have the same dimension')
+
+    max_pixel_distance_tolerance          = 4
+    minimum_fraction_of_homologous_points = 0.25
+    epsilon                               = 0.5
+    number_of_iterations                  = 0
+
+    # best parameters
+    best_scale               = -1
+    best_theta               = -1
+    best_tx                  = -1
+    best_ty                  = -1
+    best_n_homologous_points = 0
+    best_inliers             = []
+    # MAX_ITER                              = get_max_ransac_iter_from_confidence(0.99, len(initial_homologous_estimation)) # no max iter, the algorithm is much faster
+
+    # selecting pairs of points from latent
+    homologous_points = list(zip(latent_pts, reference_pts))
+    homologous_pairs  = [comb for comb in combinations(homologous_points, 2)]
+
+    # shuffling lines
+
+    shuffle(homologous_pairs)
+
+    for pair in homologous_pairs:
+        # print('Ransac progress: iteration {}/{}'.format(number_of_iterations+1, len(homologous_pairs)))
+
+        number_of_iterations += 1
+
+        # (x,y) -> points in latent; (X,Y) -> points in reference
+        ((x1,y1), (X1,Y1)), ((x2, y2), (X2,Y2)) = pair
+
+        # HIPOTHESIS STAGE
+        # determining the scale parameter
+        latent_distance    = np.sqrt((x1 - x2)*(x1 - x2) + (y1 - y2)*(y1 - y2)) # euc distance of latent
+        reference_distance = np.sqrt((X1 - X2)*(X1 - X2) + (Y1 - Y2)*(Y1 - Y2)) # euc distance of ref
+        scale              = reference_distance/latent_distance
+
+        if (1 - epsilon) > scale or scale > (1 + epsilon): # failed distance condition
+                continue # go to next iteration
+        
+        # determining the angle between the two lines
+        latent_vector    = (x2 - x1, y2 - y1)
+        reference_vector = (X2 - X1, Y2 - Y1)
+        theta = _float_angle_between_vectors(latent_vector, reference_vector)
+
+        # getting mid-point of l1l2 and R1R2; x' = (x1 + x2)/2; y' = (y1 + y2)/2
+        latent_mid_point    = ((x1 + x2)/2 , (y1 + y2)/2)  
+        reference_mid_point = ((X1 + X2)/2 , (Y1 + Y2)/2)
+
+        # finding tx and ty from homologous points (mid latent and mid reference)
+        tx = reference_mid_point[0] - scale * (latent_mid_point[0] * np.cos(theta) - latent_mid_point[1] * np.sin(theta))
+        ty = reference_mid_point[1] - scale * (latent_mid_point[0] * np.sin(theta) + latent_mid_point[1] * np.cos(theta))
+
+        # VERIFICATION STAGE
+
+        number_of_homologous_points   = 0
+        inliers                       = []
+
+        for i, (x,y) in enumerate(latent_pts):
+            # finding the coordinates of transformed latent point
+            X_hat = scale * x * np.cos(theta) - scale * y * np.sin(theta) + tx
+            Y_hat = scale * x * np.sin(theta) + scale * y * np.cos(theta) + ty
+            
+            # calculating distance to best correspondent
+
+            (X,Y) = reference_pts[i]
+            distance = np.sqrt((X_hat - X)*(X_hat - X) + (Y_hat - Y)*(Y_hat - Y))
+            
+
+            if distance < max_pixel_distance_tolerance:
+                inliers.append(((x, y), (X,Y)))
+                number_of_homologous_points += 1
+        
+        if number_of_homologous_points > best_n_homologous_points:
+            best_scale               = scale
+            best_theta               = theta
+            best_tx                  = tx
+            best_ty                  = ty
+            best_inliers             = inliers
+            best_n_homologous_points = number_of_homologous_points
+        
+    if best_n_homologous_points/len(latent_pts) > minimum_fraction_of_homologous_points:
+        return best_scale, best_theta, best_tx, best_ty, best_inliers
+    
+    return -1, -1, -1, -1, []
+
+def brute_force_ransac_similarity_transformation(latent_pts, reference_pts):
+    """
+    Finds the parameters of a similarity transformation between the latent and reference points using brute force.
+    If there is no correspondence between the two points, it return -1 in all parameters. 
+    Otherwise, returns the found parameters s,tx, ty and theta.
     
     Input: latent minutia, reference minutia - candidate to homologous points
-    Output: parameters of a similarity transformation tx, ty, theta and an status flag
+    Output: parameters of a similarity transformation scale, theta, tx, ty. 
     
     For further reference, please check section 5.2.2 of the book Theory and Applications of Image Registration - Goshtasby 2017
     """
     max_pixel_distance_tolerance          = 4
     number_of_iterations                  = 0
-    minimum_fraction_of_homologous_points = 0.25
+    minimum_fraction_of_homologous_points = 0.34
     MAX_ITER                              = get_max_ransac_iter_from_confidence(0.99, len(reference_pts))
     epsilon                               = 0.5
 
@@ -38,6 +144,7 @@ def ransac_similarity_transformation(latent_pts, reference_pts):
     shuffle(latent_pairs)
     shuffle(reference_pairs)
 
+
     for (l1,l2) in latent_pairs:
         for (R1,R2) in reference_pairs:
             if number_of_iterations%10000 == 0:
@@ -47,7 +154,7 @@ def ransac_similarity_transformation(latent_pts, reference_pts):
             latent_distance    = np.sqrt((l1[0] - l2[0])*(l1[0] - l2[0]) + (l1[1] - l2[1])*(l1[1] - l2[1])) # euc distance of latent
             reference_distance = np.sqrt((R1[0] - R2[0])*(R1[0] - R2[0]) + (R1[1] - R2[1])*(R1[1] - R2[1])) # euc distance of ref
             scale              = reference_distance/latent_distance
-            
+
             # incrementing iterations
             number_of_iterations += 1
 
@@ -94,7 +201,7 @@ def ransac_similarity_transformation(latent_pts, reference_pts):
             
             if number_of_iterations > MAX_ITER:
                 print('Ransac failed! Max number of iterations reached')
-                return -1, -1, -1, -1, -1, -1, -1, -1 # algorithm failed
+                return -1, -1, -1, -1, [] # algorithm failed
 
 def get_max_ransac_iter_from_confidence(confidence, number_of_points_in_reference):
     """
@@ -115,10 +222,13 @@ def clustering_rigid_transformation(latent_pts, reference_pts):
     """
     
     # first estimate the rotational difference between the two sets of points
-    theta = _estimate_rotational_difference(latent_pts, reference_pts)
-    tx, ty        = _estimate_translational_difference(latent_pts, reference_pts, theta)
+    theta  = _estimate_rotational_difference(latent_pts, reference_pts)
+    tx, ty = _estimate_translational_difference(latent_pts, reference_pts, 0)
+    scale   = 1
+    inliers = []
 
-    return (2, tx, ty)
+
+    return (scale, theta, tx, ty, inliers)
 
 def _estimate_rotational_difference(latent_pts, reference_pts):
     """

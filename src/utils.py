@@ -1,6 +1,8 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.offsetbox import AnchoredText
+from matplotlib import cm
 
 def create_debug_images_directory(experiment_directory):
     """

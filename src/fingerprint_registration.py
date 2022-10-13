@@ -68,7 +68,13 @@ def main():
 
 
         # calculating parameters of similarity transformation from minutia points
-        scale, theta, tx, ty, inliers = ransac_similarity_transformation(latent_mnts, reference_mnts)
+        tic = time.time()
+        #scale, theta, tx, ty, inliers = brute_force_ransac_similarity_transformation(latent_mnts, reference_mnts)
+        scale, theta, tx, ty, inliers = descriptor_based_ransac_similarity_transformation(latent_mnts, reference_mnts)
+        # scale, theta, tx, ty, inliers = clustering_rigid_transformation(latent_mnts, reference_mnts)
+  
+
+
         
         if scale == -1:
             print('Algorithm failed in step {}'.format(i+1))
@@ -89,8 +95,7 @@ def main():
 
         if DEBUG:
             save_dir = debug_images_directory + f'/debug_{i + 1}.png'
-            debug_plot_correspondence_images(warped_latent, warped_reference,bounding_box, scale, theta, tx, ty, t, inliers, save_dir)
-            
+            debug_plot_correspondence_images(warped_latent, warped_reference,bounding_box, scale, theta, tx, ty, t, inliers, save_dir, latent_mnts, reference_mnts)
 
     toc = time.time()
     print('Fingerprint registration algorithm finished with sucess in {:.2f}s'.format(toc - tic))

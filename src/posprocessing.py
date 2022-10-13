@@ -70,7 +70,7 @@ def warpTwoImages(img1, img2, H):
     return result, result2, t
 
 
-def debug_plot_correspondence_images(warped_latent, warped_reference, bounding_box, scale, theta, tx, ty, t, inliers, save_dir):
+def debug_plot_correspondence_images(warped_latent, warped_reference, bounding_box, scale, theta, tx, ty, t, inliers, save_dir, latent_mnts, reference_mnts):
     """
     Plots latent and reference image on the same coordinate system. Also plots the correspodent homologous points
     """
@@ -80,13 +80,13 @@ def debug_plot_correspondence_images(warped_latent, warped_reference, bounding_b
     warped_reference = np.where(warped_reference > 200, 0, 255)
 
 
-    # x_latent, y_latent       = zip(*latent_mnts)
-    # x_reference, y_reference = zip(*reference_mnts)
+    x_latent, y_latent       = zip(*latent_mnts)
+    x_reference, y_reference = zip(*reference_mnts)
 
-    # x_latent = list(x_latent)
-    # y_latent = list(y_latent)
-    # x_reference = list(x_reference)
-    # y_reference = list(y_reference)
+    x_latent = list(x_latent)
+    y_latent = list(y_latent)
+    x_reference = list(x_reference)
+    y_reference = list(y_reference)
 
     # Unpacking inliers from latent and from reference
     x_inliers_latent, y_inliers_latent       = zip(*[item[0] for item in inliers])
@@ -101,7 +101,7 @@ def debug_plot_correspondence_images(warped_latent, warped_reference, bounding_b
     fig, ax = plt.subplots()
     w,h = warped_latent.shape
 
-    # Color scheme to superimpose images
+    # Color scheme to superimpose images - only in latent bounding box region
     debug_image = np.zeros((w,h,3))
     debug_image[:,:,0] = warped_reference
     debug_image[:,:,1] = warped_reference
@@ -145,9 +145,9 @@ def debug_plot_correspondence_images(warped_latent, warped_reference, bounding_b
     # match_colors     = sample(list(available_colors.values()), len(x_inliers_latent))
 
     # Plotting final image
-    #ax.scatter(x_latent, y_latent, color = 'orange', s = 20, marker = 'o')
+    #ax.scatter(x_latent, y_latent, color = 'orange', s = 20, marker = '*')
     ax.scatter(x_inliers_latent, y_inliers_latent, color = 'blue', s = 20, marker = '*')
-    #ax.scatter(x_reference, y_reference, color = 'red', s = 20, marker = 'o')
+    #ax.scatter(x_reference, y_reference, color = 'green', s = 20, marker = '*')
     ax.scatter(x_inliers_reference, y_inliers_reference, color = 'red', s = 20, marker = '*')
     ax.axis('off')
 
